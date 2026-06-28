@@ -2,12 +2,17 @@
 
 #include <DynamicOutput/DynamicOutput.hpp>
 
+#include "FluxCon.hpp"
+
 namespace MyNamespace
 {
     using namespace RC::Unreal;
+    using namespace Flux;
 
     class MyMod : public CppUserModBase
     {
+        bool fluxConReady = false;
+
     public:
         MyMod()
         {
@@ -30,10 +35,28 @@ namespace MyNamespace
         // LuaMadeSimple::Lua& async_lua, LuaMadeSimple::Lua* hook_lua) -> void override;
 
         // You Can Use Unreal Namespace After This Function Fires
-        auto on_unreal_init() -> void override { Output::send<LogLevel::Normal>(STR("MyMod Loaded!!")); }
+        auto on_unreal_init() -> void override { Output::send<LogLevel::Normal>(STR("MyMod Loaded!!\n")); }
 
-        // Fires On Each Unreal Engine Update Tick
-        // auto on_update() -> void override;
+        auto on_cpp_mods_loaded() -> void override
+        {
+            if (!FluxConAPI::HasInit())
+            {
+                Output::send<LogLevel::Warning>(STR("FluxCon Not Found!\n"));
+            }
+        }
+
+        auto on_update() -> void override
+        {
+            if (fluxConReady)
+                return;
+            if (!FluxConAPI::HasInit())
+                return;
+            if (!FluxConAPI::IsLoggerInit())
+                return;
+
+            fluxConReady = true;
+            Output::send<LogLevel::Normal>(STR("FluxCon ready!\n"));
+        }
     };
 } // namespace MyNamespace
 

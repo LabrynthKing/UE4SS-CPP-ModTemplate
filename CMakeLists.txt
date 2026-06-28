@@ -18,8 +18,14 @@ add_subdirectory(deps EXCLUDE_FROM_ALL)
 set(TARGET MyMod)
 
 add_library(${TARGET} SHARED
-     src/Mod.cpp
+        # Main Files
+        src/Mod.cpp
+
+        # Header Files
+        include/FluxCon.hpp
 )
+
+target_include_directories(${TARGET} PRIVATE include)
 
 target_compile_definitions(${TARGET}
         PRIVATE
@@ -28,7 +34,7 @@ target_compile_definitions(${TARGET}
 
 target_link_libraries(${TARGET}
         PRIVATE
-	MyModDeps
+        MyModDeps
 )
 
 set_target_properties(${TARGET} PROPERTIES
