@@ -1,5 +1,7 @@
 #include <Mod/CppUserModBase.hpp>
 
+#include <optional>
+
 #include <DynamicOutput/DynamicOutput.hpp>
 
 #include "FluxCon.hpp"
@@ -35,27 +37,31 @@ namespace MyNamespace
         // LuaMadeSimple::Lua& async_lua, LuaMadeSimple::Lua* hook_lua) -> void override;
 
         // You Can Use Unreal Namespace After This Function Fires
-        auto on_unreal_init() -> void override { Output::send<LogLevel::Normal>(STR("MyMod Loaded!!\n")); }
+        // auto on_unreal_init() -> void override {}
 
-        auto on_cpp_mods_loaded() -> void override
+        static void RegisterMod()
         {
-            if (!FluxConAPI::HasInit())
-            {
-                Output::send<LogLevel::Warning>(STR("FluxCon Not Found!\n"));
-            }
+            const ModInfo info = {.name = "MyMod",
+                                  .type = ModType::Cpp,
+                                  .author = "MyName",
+                                  .version = "1.0.0",
+                                  .nexusLink = std::nullopt,
+                                  .gitHubLink = std::nullopt,
+                                  .dependencies = {}};
+
+            FluxConAPI::RegisterMod(info);
         }
 
         auto on_update() -> void override
         {
-            if (fluxConReady)
-                return;
-            if (!FluxConAPI::HasInit())
-                return;
-            if (!FluxConAPI::IsLoggerInit())
-                return;
-
-            fluxConReady = true;
-            Output::send<LogLevel::Normal>(STR("FluxCon ready!\n"));
+            if (!fluxConReady)
+            {
+                if (FluxConAPI::HasInit() && FluxConAPI::GetLoggerState() == LoggerState::Connected)
+                {
+                    fluxConReady = true;
+                    RegisterMod();
+                }
+            }
         }
     };
 } // namespace MyNamespace

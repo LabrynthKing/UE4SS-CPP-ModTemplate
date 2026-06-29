@@ -19,6 +19,8 @@
 /* clang-format off */
 #include <string>
 #include <mutex>
+#include <optional>
+#include <vector>
 
 #include <windows.h>
 #include <psapi.h>
@@ -26,61 +28,117 @@
 
 namespace Flux
 {
+    enum class ModType : uint32_t
+    {
+        None = 0,
+        Lua = 1 << 0,
+        Cpp = 1 << 1,
+        Blueprint = 1 << 2,
+        Pak = 1 << 3,
+
+        // Hybrids
+        LuaCpp = Lua | Cpp,
+        LuaBlueprint = Lua | Blueprint,
+        CppBlueprint = Cpp | Blueprint,
+        LuaCppBlueprint = Lua | Cpp | Blueprint,
+    };
+
+    enum class LoggerState : uint8_t
+    {
+        NotStarted = 0,
+        Connecting = 1,
+        Connected = 2,
+        Reconnecting = 3,
+        ShuttingDown = 4,
+    };
+
+    struct ModInfo
+    {
+        std::string name;
+        ModType type;
+        std::string author;
+        std::string version;
+        std::optional<std::string> nexusLink;
+        std::optional<std::string> gitHubLink;
+        std::vector<std::string> dependencies;
+    };
+
     class FluxConAPI
     {
         typedef FluxConAPI*(__cdecl* GetterFunc)();
-        static inline FluxConAPI* instance = nullptr;
+        static inline std::atomic<FluxConAPI*> instance{nullptr};
 
         static FluxConAPI* Get()
         {
-            if (instance != nullptr)
-                return instance;
+            if (FluxConAPI* cached = instance.load(std::memory_order_acquire))
+                return cached;
 
-            static std::once_flag flag;
-            std::call_once(flag,
-                           []()
-                           {
-                               HMODULE mods[4096];
-                               DWORD cb = 0;
-                               HANDLE proc = GetCurrentProcess();
-                               if (!EnumProcessModules(proc, mods, sizeof(mods), &cb))
-                                   return;
+            static std::mutex lookupMutex;
+            std::lock_guard lock(lookupMutex);
 
-                               const DWORD count = cb / sizeof(HMODULE);
-                               for (DWORD i = 0; i < count; i++)
-                               {
-                                   wchar_t path[MAX_PATH] = {};
-                                   if (!GetModuleFileNameExW(proc, mods[i], path, MAX_PATH))
-                                       continue;
-                                   if (std::wstring(path).find(L"Mods\\FluxCon\\dlls\\") == std::wstring::npos)
-                                       continue;
+            // Re-Check
+            if (FluxConAPI* cached = instance.load(std::memory_order_acquire))
+                return cached;
 
-                                   const auto func =
-                                       reinterpret_cast<GetterFunc>(GetProcAddress(mods[i], "fluxcon_get"));
-                                   if (!func)
-                                       return;
+            HMODULE mods[4096];
+            DWORD cb = 0;
+            HANDLE proc = GetCurrentProcess();
+            if (!EnumProcessModules(proc, mods, sizeof(mods), &cb))
+                return nullptr;
 
-                                   instance = func();
-                                   return;
-                               }
-                           });
+            const DWORD count =
+                (std::min)(static_cast<DWORD>(cb / sizeof(HMODULE)), static_cast<DWORD>(std::size(mods)));
 
-            return instance;
+            for (DWORD i = 0; i < count; i++)
+            {
+                wchar_t path[MAX_PATH] = {};
+                if (!GetModuleFileNameExW(proc, mods[i], path, MAX_PATH))
+                    continue;
+                if (std::wstring(path).find(L"Mods\\FluxCon\\dlls\\") == std::wstring::npos)
+                    continue;
+
+                if (const auto func = reinterpret_cast<GetterFunc>(GetProcAddress(mods[i], "fluxcon_get")))
+                {
+                    FluxConAPI* found = func();
+                    instance.store(found, std::memory_order_release);
+                    return found;
+                }
+            }
+
+            return nullptr;
         }
 
     protected:
         virtual ~FluxConAPI() = default;
 
-        virtual bool IsLoggerInitInternal() = 0;
+        virtual LoggerState GetLoggerStateInternal() = 0;
+        virtual void RegisterModInternal(const ModInfo& info) = 0;
+        virtual void UnRegisterModInternal(uint32_t modId) = 0;
 
     public:
         static bool HasInit() { return Get() != nullptr; }
 
-        static bool IsLoggerInit()
+        static LoggerState GetLoggerState()
         {
             if (!HasInit())
-                return false;
-            return Get()->IsLoggerInitInternal();
+                return LoggerState::NotStarted;
+            return Get()->GetLoggerStateInternal();
+        }
+
+        static void RegisterMod(const ModInfo& info)
+        {
+            if (HasInit())
+            {
+                Get()->RegisterModInternal(info);
+            }
+        }
+
+        static void UnRegisterMod(const uint32_t modId)
+        {
+            if (HasInit())
+            {
+                Get()->UnRegisterModInternal(modId);
+            }
         }
     };
 } // namespace Flux
