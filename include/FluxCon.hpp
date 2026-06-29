@@ -55,6 +55,7 @@ namespace Flux
     struct ModInfo
     {
         std::string name;
+        std::string displayName;
         ModType type;
         std::string author;
         std::string version;
@@ -67,6 +68,8 @@ namespace Flux
     {
         typedef FluxConAPI*(__cdecl* GetterFunc)();
         static inline std::atomic<FluxConAPI*> instance{nullptr};
+
+        static inline std::uint32_t modId = 0;
 
         static FluxConAPI* Get()
         {
@@ -116,6 +119,20 @@ namespace Flux
         virtual void UnRegisterModInternal(uint32_t modId) = 0;
 
     public:
+        // Hash Func For ModID
+        static uint32_t GetFNV1aHash(const std::string_view input) noexcept
+        {
+            uint32_t hash = 2166136261U; // FNV Offset Basis
+
+            for (const char c : input)
+            {
+                hash ^= static_cast<uint8_t>(c);
+                hash *= 16777619U; // FNV Prime
+            }
+
+            return hash;
+        }
+
         static bool HasInit() { return Get() != nullptr; }
 
         static LoggerState GetLoggerState()
@@ -129,13 +146,14 @@ namespace Flux
         {
             if (HasInit())
             {
+                modId = GetFNV1aHash(info.name);
                 Get()->RegisterModInternal(info);
             }
         }
 
-        static void UnRegisterMod(const uint32_t modId)
+        static void UnRegisterMod()
         {
-            if (HasInit())
+            if (HasInit() && modId != 0)
             {
                 Get()->UnRegisterModInternal(modId);
             }

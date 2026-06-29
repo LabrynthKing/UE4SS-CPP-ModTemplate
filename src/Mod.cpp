@@ -1,8 +1,7 @@
 #include <Mod/CppUserModBase.hpp>
 
+#include <chrono>
 #include <optional>
-
-#include <DynamicOutput/DynamicOutput.hpp>
 
 #include "FluxCon.hpp"
 
@@ -14,6 +13,9 @@ namespace MyNamespace
     class MyMod : public CppUserModBase
     {
         bool fluxConReady = false;
+        bool registered = false;
+        bool unregistered = false;
+        std::chrono::steady_clock::time_point registrationTime;
 
     public:
         MyMod()
@@ -39,9 +41,10 @@ namespace MyNamespace
         // You Can Use Unreal Namespace After This Function Fires
         // auto on_unreal_init() -> void override {}
 
-        static void RegisterMod()
+        void RegisterMod()
         {
             const ModInfo info = {.name = "MyMod",
+                                  .displayName = "My Mod",
                                   .type = ModType::Cpp,
                                   .author = "MyName",
                                   .version = "1.0.0",
@@ -50,6 +53,9 @@ namespace MyNamespace
                                   .dependencies = {}};
 
             FluxConAPI::RegisterMod(info);
+
+            registered = true;
+            registrationTime = std::chrono::steady_clock::now();
         }
 
         auto on_update() -> void override
@@ -60,6 +66,20 @@ namespace MyNamespace
                 {
                     fluxConReady = true;
                     RegisterMod();
+                }
+            }
+
+            if (registered && !unregistered)
+            {
+                const auto currentTime = std::chrono::steady_clock::now();
+                const auto elapsedSeconds =
+                    std::chrono::duration_cast<std::chrono::seconds>(currentTime - registrationTime).count();
+
+                if (elapsedSeconds >= 20)
+                {
+                    unregistered = true;
+
+                    FluxConAPI::UnRegisterMod();
                 }
             }
         }
