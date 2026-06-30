@@ -79,6 +79,7 @@ namespace MyNamespace
                 {
                     unregistered = true;
 
+                    FluxConAPI::Info("Test");
                     FluxConAPI::UnRegisterMod();
                 }
             }

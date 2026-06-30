@@ -21,6 +21,8 @@
 #include <mutex>
 #include <optional>
 #include <vector>
+#include <format>
+#include <utility>
 
 #include <windows.h>
 #include <psapi.h>
@@ -50,6 +52,32 @@ namespace Flux
         Connected = 2,
         Reconnecting = 3,
         ShuttingDown = 4,
+    };
+
+    enum class LogLevel : uint32_t
+    {
+        Info = 0,
+        Debug = 1,
+        Verbose = 2,
+        Warning = 3,
+        Error = 4,
+        Fatal = 5,
+    };
+
+    // C# Exceptions; Might Add More Later IDK
+    enum class Exception : uint32_t
+    {
+        None,
+        UnknownRuntimeError,
+        Timeout,
+        InvalidCast,
+        KeyNotFound,
+        PathNotFound,
+        NullReference,
+        InvalidArgument,
+        IndexOutOfBounds,
+        InvalidOperation,
+        ApiVersionMismatch,
     };
 
     struct ModInfo
@@ -117,6 +145,8 @@ namespace Flux
         virtual LoggerState GetLoggerStateInternal() = 0;
         virtual void RegisterModInternal(const ModInfo& info) = 0;
         virtual void UnRegisterModInternal(uint32_t modId) = 0;
+        virtual void LogInternal(uint32_t modId, LogLevel level, const std::string& message) = 0;
+        virtual void LogInternal(uint32_t modId, LogLevel level, const std::string& message, Exception ex) = 0;
 
     public:
         // Hash Func For ModID
@@ -156,7 +186,142 @@ namespace Flux
             if (HasInit() && modId != 0)
             {
                 Get()->UnRegisterModInternal(modId);
+                modId = 0;
             }
+        }
+
+        template <typename... Args>
+        static void Log(const LogLevel level, const std::string_view fmt_string, Args&&... args)
+        {
+            if (!HasInit() || modId == 0)
+                return;
+
+            if constexpr (sizeof...(args) == 0)
+            {
+                Get()->LogInternal(modId, level, std::string(fmt_string));
+            }
+            else
+            {
+                try
+                {
+                    const std::string formatted_msg = std::vformat(fmt_string, std::make_format_args(args...));
+                    Get()->LogInternal(modId, level, formatted_msg);
+                }
+                catch ([[maybe_unused]] const std::format_error& err)
+                {
+                    Get()->LogInternal(modId, LogLevel::Error, "Invalid Log Format Sequence!",
+                                       Exception::InvalidArgument);
+                }
+            }
+        }
+
+        template <typename... Args>
+        static void Log(const LogLevel level, const Exception ex, const std::string_view fmt_string, Args&&... args)
+        {
+            if (!HasInit() || modId == 0)
+                return;
+
+            if constexpr (sizeof...(args) == 0)
+            {
+                Get()->LogInternal(modId, level, std::string(fmt_string), ex);
+            }
+            else
+            {
+                try
+                {
+                    const std::string formatted_msg = std::vformat(fmt_string, std::make_format_args(args...));
+                    Get()->LogInternal(modId, level, formatted_msg, ex);
+                }
+                catch ([[maybe_unused]] const std::format_error& err)
+                {
+                    Get()->LogInternal(modId, LogLevel::Error, "Invalid Log Format Sequence!",
+                                       Exception::InvalidArgument);
+                }
+            }
+        }
+
+        // Info
+        static void Info(const std::string_view msg) { Log(LogLevel::Info, msg); }
+        static void Info(const Exception ex, const std::string_view msg) { Log(LogLevel::Info, ex, msg); }
+        template <typename... Args>
+        static void Info(const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Info, msg, std::forward<Args>(args)...);
+        }
+        template <typename... Args>
+        static void Info(const Exception ex, const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Info, ex, msg, std::forward<Args>(args)...);
+        }
+
+        // Verbose
+        static void Verbose(const std::string_view msg) { Log(LogLevel::Verbose, msg); }
+        static void Verbose(const Exception ex, const std::string_view msg) { Log(LogLevel::Verbose, ex, msg); }
+        template <typename... Args>
+        static void Verbose(const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Verbose, msg, std::forward<Args>(args)...);
+        }
+        template <typename... Args>
+        static void Verbose(const Exception ex, const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Verbose, ex, msg, std::forward<Args>(args)...);
+        }
+
+        // Debug
+        static void Debug(const std::string_view msg) { Log(LogLevel::Debug, msg); }
+        static void Debug(const Exception ex, const std::string_view msg) { Log(LogLevel::Debug, ex, msg); }
+        template <typename... Args>
+        static void Debug(const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Debug, msg, std::forward<Args>(args)...);
+        }
+        template <typename... Args>
+        static void Debug(const Exception ex, const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Debug, ex, msg, std::forward<Args>(args)...);
+        }
+
+        // Warn
+        static void Warn(const std::string_view msg) { Log(LogLevel::Warning, msg); }
+        static void Warn(const Exception ex, const std::string_view msg) { Log(LogLevel::Warning, ex, msg); }
+        template <typename... Args>
+        static void Warn(const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Warning, msg, std::forward<Args>(args)...);
+        }
+        template <typename... Args>
+        static void Warn(const Exception ex, const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Warning, ex, msg, std::forward<Args>(args)...);
+        }
+
+        // Error
+        static void Error(const std::string_view msg) { Log(LogLevel::Error, msg); }
+        static void Error(const Exception ex, const std::string_view msg) { Log(LogLevel::Error, ex, msg); }
+        template <typename... Args>
+        static void Error(const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Error, msg, std::forward<Args>(args)...);
+        }
+        template <typename... Args>
+        static void Error(const Exception ex, const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Error, ex, msg, std::forward<Args>(args)...);
+        }
+
+        // Fatal
+        static void Fatal(const std::string_view msg) { Log(LogLevel::Fatal, msg); }
+        static void Fatal(const Exception ex, const std::string_view msg) { Log(LogLevel::Fatal, ex, msg); }
+        template <typename... Args>
+        static void Fatal(const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Fatal, msg, std::forward<Args>(args)...);
+        }
+        template <typename... Args>
+        static void Fatal(const Exception ex, const std::string_view msg, Args&&... args)
+        {
+            Log(LogLevel::Fatal, ex, msg, std::forward<Args>(args)...);
         }
     };
 } // namespace Flux
