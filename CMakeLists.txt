@@ -18,8 +18,15 @@ add_subdirectory(deps EXCLUDE_FROM_ALL)
 set(TARGET MyMod)
 
 add_library(${TARGET} SHARED
-     src/Mod.cpp
+        # API
+        include/TranslationHelperAPI.h
+
+        # Main Files
+        src/Mod.cpp
 )
+
+target_include_directories(${TARGET} PRIVATE include)
+target_include_directories(${TARGET} PRIVATE src)
 
 target_compile_definitions(${TARGET}
         PRIVATE
